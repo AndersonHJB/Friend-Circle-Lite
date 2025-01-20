@@ -24,11 +24,11 @@ def main():
     spider_settings = config.get_spider_settings()
     if spider_settings['enable']:
         logging.info("开始爬取友链数据...")
-        result, lost_friends = friend_manager.fetch_friend_data()
-        if spider_settings['merge_result']:
-            result, lost_friends = friend_manager.merge_data(result, lost_friends)
-        friend_manager.save_data_to_files(result, lost_friends)
-        logging.info("友链数据处理完成")
+        friends = friend_manager.fetch_friend_data()
+        # if spider_settings['merge_result']:
+        #     result, lost_friends = friend_manager.merge_data(result, lost_friends)
+        # friend_manager.save_data_to_files(result, lost_friends)
+        # logging.info("友链数据处理完成")
     
     # # Step 4: 处理 RSS 更新
     # if config["rss_subscribe"]["enable"]:

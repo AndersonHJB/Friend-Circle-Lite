@@ -5,30 +5,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from src.utils.utils import format_published_time, replace_non_domain
-class Friend:
-    """
-    代表一个朋友的博客信息。
-    """
-    def __init__(self, name, blog_url, avatar, feed_url=None, feed_type=None):
-        self.name = name
-        self.blog_url = blog_url
-        self.avatar = avatar
-        self.feed_url = feed_url
-        self.feed_type = feed_type
-        self.articles = []
-
-    def add_articles(self, articles):
-        """
-        添加文章到朋友的博客数据中
-        """
-        self.articles.extend(articles)
-
-    def clear_articles(self):
-        """
-        清空该朋友的文章数据
-        """
-        self.articles = []
-
+from src.managers.friend_manager import Friend, Friends
 class FriendLinkManager:
     """
     负责管理与爬取友链数据。
@@ -51,17 +28,56 @@ class FriendLinkManager:
         friends_data = self._load_friends_data(spider_settings['json_url'])
         friends = []
 
-        logging.info(f"共有 {len(friends_data['friends'])} 位朋友，开始抓取数据...")
-        for friend in friends_data['friends']:
+        logging.info(f"共有 {len(friends_data['friends'])} 位朋友，开始获取所有朋友订阅地址...")
+        for friend_data in friends_data['friends']:
             try:
-                result = self._process_friend(friend)
-                friends.append(result)
+                result = self._get_friend_feed_url(friend_data)
             except Exception as e:
-                logging.error(f"处理友链 {friend['name']} 时出现错误：{e}", exc_info=True)
+                logging.error(f"处理友链 {friend_data[1]} 时出现网络错误，已跳过", exc_info=True)
+            friends.append(result)
                 
-        logging.info(f"友链数据抓取完成，共有 {len(friends)} 位朋友")
+        logging.info(f"友链数据抓取完成，共有 {len(friends)} 位朋友成功获取订阅地址，其余朋友获取失败")
+        
+        logging.info("开始多线程获取所有有效朋友的文章数据...")
+        processed_friends = self._fetch_all_friend_articles(friends)
 
-        return friends
+        logging.info(f"文章数据抓取完成，共处理了 {len(processed_friends)} 位朋友")
+        return processed_friends
+    
+    def _fetch_all_friend_articles(self, friends):
+        """
+        使用多线程获取所有有效朋友的文章数据
+        :param friends: Friend 列表
+        :return: 处理后的 Friend 列表
+        """
+        processed_friends = []
+
+        # 创建线程池，最多 10 个线程
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_friend = {executor.submit(self._process_friend_safe, friend): friend for friend in friends}
+
+            for future in as_completed(future_to_friend):
+                friend = future_to_friend[future]
+                try:
+                    processed_friend = future.result()
+                    processed_friends.append(processed_friend)
+                except Exception as e:
+                    logging.error(f"处理朋友 {friend} 时发生错误，已跳过", exc_info=True)
+
+        return processed_friends
+
+    def _process_friend_safe(self, friend):
+        """
+        包装 _process_friend 方法，捕获异常以防止线程崩溃
+        :param friend: Friend 实例
+        :return: 处理后的 Friend 实例
+        """
+        try:
+            return self._process_friend(friend)
+        except Exception as e:
+            logging.error(f"处理朋友 {friend} 时发生未知错误", exc_info=True)
+            return None
+
 
     def merge_data(self, result, lost_friends):
         """
@@ -94,18 +110,31 @@ class FriendLinkManager:
             logging.error(f"无法获取链接：{json_url} ：{e}", exc_info=True)
             return {'friends': []}
 
-    def _process_friend(self, friend_data):
+    
+    def _get_friend_feed_url(self, friend_data):
         """
-        处理单个朋友的博客信息
+        获取朋友的 feed 地址
         """
         name = friend_data[0]
         blog_url = friend_data[1]
         avatar = friend_data[2]
-
-        # 获取对应的 feed 信息
+        
         feed_type, feed_url = self._check_feed(blog_url)
-        print(f"{name} 的博客 {blog_url} 的 feed 类型为 {feed_type}")
-        friend = Friend(name, blog_url, avatar, feed_url, feed_type)
+        
+        if feed_type != 'none':
+            return Friend(name, blog_url, avatar, feed_url, feed_type, isError=True)
+        else:
+            return Friend(name, blog_url, avatar, feed_url, feed_type)
+    
+    def _process_friend(self, friend: Friend):
+        """
+        处理单个朋友的博客信息
+        """
+        blog_url = friend.url
+        name = friend.name
+        avatar = friend.avatar
+        feed_url = friend.feed_url
+        feed_type = friend.feed_type
 
         if feed_type != 'none':
             feed_info = self._parse_feed(feed_url, blog_url)
@@ -122,7 +151,7 @@ class FriendLinkManager:
             friend.add_articles(articles)
             logging.info(f"{name} 发布了 {len(articles)} 篇新文章")
         else:
-            logging.warning(f"{name} 的博客 {blog_url} 无法访问")
+            logging.warning(f"{name} 的博客 {blog_url} 无法访问，跳过")
         
         return friend
 
@@ -159,7 +188,7 @@ class FriendLinkManager:
         """
         try:
             response = self.session.get(url, headers=self.headers, timeout=self.timeout)
-            response.encoding = response.apparent_encoding
+            response.encoding = response.apparent_encoding or 'utf-8'
             feed = feedparser.parse(response.text)
             
             result = {
