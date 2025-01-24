@@ -21,8 +21,8 @@ spider_settings:
 #   subject:            邮件主题
 #   body_template:      邮件正文的 HTML 模板文件
 email_push:
-  enable: false
-  to_email: recipient@example.com
+  enable: true
+  to_email: 1432803776@qq.com
   subject: "今天的 RSS 订阅更新"
   body_template: "rss_template.html"
 
@@ -36,12 +36,12 @@ email_push:
 #     title:            你的博客标题，如果启用了推送，用于生成邮件主题
 rss_subscribe:
   enable: true
-  github_username: willow-god
+  github_username: AndersonHJB
   github_repo: Friend-Circle-Lite
-  your_blog_url: https://blog.liushen.fun/
+  your_blog_url: https://blog.bornforthis.cn/
   email_template: "./rss_subscribe/email_template.html"
   website_info:
-    title: "清羽飞扬"
+    title: "别碰我的镜头盖"
 
 # SMTP 配置
 # 解释：使用其中的相关配置实现上面两种功能，若无推送要求可以不配置，请将以上两个配置置为false
@@ -50,7 +50,7 @@ rss_subscribe:
 #   port：              SMTP 端口号
 #   use_tls：           是否使用 tls 加密
 smtp:
-  email: 3162475700@qq.com
+  email: 1432803776@qq.com
   server: smtp.qq.com
   port: 587
   use_tls: true
